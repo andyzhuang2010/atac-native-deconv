@@ -1,8 +1,4 @@
-"""High-level deconvolution entry point.
-
-Controls the whole processing: reference signature estimation →
-peak scoring → model training → posterior export.
-"""
+"""Build reference profiles, score peaks, fit the model, and save results."""
 
 import os
 from typing import Optional
@@ -42,16 +38,8 @@ def deconvolve(
 ) -> dict:
     r"""Run the full atac-native-deconv deconvolution pipeline.
 
-    **Step 1** -- Compute reference accessibility signatures
-    :math:`\theta_{c,p}` from the scATAC reference.
-
-    **Step 2** -- (Optional) Score peaks by cell-type specificity,
-    reproducibility, and spatial variability.
-
-    **Step 3** -- Train an ATAC-native Poisson deconvolution model with
-    learned peak weights.
-
-    **Step 4** -- Export posterior cell-type abundances and peak weights.
+    Builds reference profiles, optionally scores peaks, then fits the model
+    and exports cell-type abundances and peak weights.
 
     Parameters
     ----------
@@ -100,7 +88,7 @@ def deconvolve(
     ``"peak_scores"``, ``"cell_state_df"``, and optionally ``"model"``.
     """
 
-    # ---- align feature space ----
+    # Align feature space
     common_peaks = adata_spatial.var_names.intersection(adata_ref.var_names)
     if len(common_peaks) == 0:
         raise ValueError("No overlapping peaks between spatial and reference data.")
@@ -108,7 +96,7 @@ def deconvolve(
     adata_ref_sub = adata_ref[:, common_peaks].copy()
     adata_spatial_sub = adata_spatial[:, common_peaks].copy()
 
-    # ---- Step 1: reference signatures ----
+    # Reference signatures
     print("[atac-native-deconv] Computing reference signatures …")
     cell_state_df = compute_reference_signatures(
         adata_ref_sub,
@@ -117,7 +105,7 @@ def deconvolve(
         shrinkage=shrinkage,
     )
 
-    # ---- Step 2: peak scoring ----
+    # Peak scoring
     peak_scores: Optional[np.ndarray] = None
     if use_peak_scores:
         print("[atac-native-deconv] Scoring peaks …")
@@ -137,7 +125,7 @@ def deconvolve(
             peak_scores = peak_scores[sel.values]
         print(f"[atac-native-deconv] Filtered to {adata_spatial_sub.n_vars} informative peaks.")
 
-    # ---- Step 3: build & train model ----
+    # Build & train model
     print("[atac-native-deconv] Building model …")
     model = ATACDeconvModel(
         adata_spatial=adata_spatial_sub,
@@ -160,13 +148,13 @@ def deconvolve(
         batch_size=batch_size,
     )
 
-    # ---- Step 4: export posterior ----
+    # Export posterior
     print("[atac-native-deconv] Exporting posterior …")
     results = model.export_posterior(num_samples=num_posterior_samples)
 
     proportions = model.get_proportions(num_samples=num_posterior_samples)
 
-    # ---- save CSV outputs ----
+    # Save csv outputs
     os.makedirs(results_path, exist_ok=True)
     results["q05_cell_abundance_w_sf"].to_csv(
         os.path.join(results_path, "q05_cell_abundance_w_sf.csv")
@@ -179,7 +167,7 @@ def deconvolve(
         os.path.join(results_path, "peak_weights.csv")
     )
 
-    # ---- store in adata ----
+    # Store in adata
     adata_spatial.obsm["q05_cell_abundance_w_sf"] = _align_to_original(
         results["q05_cell_abundance_w_sf"], adata_spatial, adata_spatial_sub
     )

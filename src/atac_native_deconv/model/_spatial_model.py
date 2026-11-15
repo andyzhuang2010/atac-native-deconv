@@ -68,7 +68,7 @@ class ATACDeconvModel:
         likelihood: str = "poisson",
         use_gpu: bool = True,
     ):
-        # ---- validate feature alignment ----
+        # Validate feature alignment
         common = adata_spatial.var_names.intersection(cell_state_df.index)
         if len(common) == 0:
             raise ValueError("No overlapping features between spatial data and reference signatures.")
@@ -79,7 +79,7 @@ class ATACDeconvModel:
             )
             adata_spatial = adata_spatial[:, common].copy()
 
-        # ---- extract count matrix ----
+        # Extract count matrix
         X = adata_spatial.layers[layer] if layer else adata_spatial.X
         if sp.issparse(X):
             X_dense = np.asarray(X.toarray(), dtype=np.float32)
@@ -87,14 +87,14 @@ class ATACDeconvModel:
             X_dense = np.asarray(X, dtype=np.float32)
         self._X = torch.tensor(X_dense)
 
-        # ---- cell state matrix (n_celltypes × n_peaks) ----
+        # Cell state matrix (n_celltypes × n_peaks)
         cell_state_aligned = cell_state_df.loc[common]
         cell_state_mat = cell_state_aligned.values.T.astype(np.float32)
 
-        # ---- library sizes ----
+        # Library sizes
         library_sizes = X_dense.sum(axis=1)
 
-        # ---- peak scores ----
+        # Peak scores
         if peak_scores is not None:
             peak_scores_aligned = np.asarray(peak_scores, dtype=np.float64)
             if len(peak_scores_aligned) != len(common):
@@ -103,12 +103,12 @@ class ATACDeconvModel:
         else:
             peak_scores_aligned = None
 
-        # ---- device ----
+        # Device
         self.device = torch.device(
             "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
         )
 
-        # ---- Pyro module ----
+        # Pyro module
         self.module = ATACDeconvModule(
             n_obs=adata_spatial.n_obs,
             n_peaks=len(common),
@@ -126,23 +126,20 @@ class ATACDeconvModel:
 
         self._X = self._X.to(self.device)
 
-        # ---- guide ----
+        # Guide
         pyro.clear_param_store()
         self.guide = AutoNormal(
             self.module,
             init_loc_fn=init_to_feasible,
         )
 
-        # ---- metadata ----
+        # Metadata
         self.adata = adata_spatial
         self.cell_type_names = list(cell_state_aligned.columns)
         self.peak_names = list(common)
         self.history: list[float] = []
         self.is_trained = False
 
-    # ------------------------------------------------------------------ #
-    #  Training                                                            #
-    # ------------------------------------------------------------------ #
 
     def train(
         self,
@@ -212,9 +209,6 @@ class ATACDeconvModel:
 
         self.is_trained = True
 
-    # ------------------------------------------------------------------ #
-    #  Posterior export                                                     #
-    # ------------------------------------------------------------------ #
 
     def export_posterior(
         self,
@@ -324,9 +318,6 @@ class ATACDeconvModel:
         row_sums = abundances.sum(axis=1).replace(0, 1)
         return abundances.div(row_sums, axis=0)
 
-    # ------------------------------------------------------------------ #
-    #  Diagnostics                                                         #
-    # ------------------------------------------------------------------ #
 
     def plot_history(self, skip: int = 0):
         """Plot ELBO training loss.
@@ -358,12 +349,9 @@ class ATACDeconvModel:
         fig.tight_layout()
         return fig
 
-    # ------------------------------------------------------------------ #
-    #  Save / load helpers                                                 #
-    # ------------------------------------------------------------------ #
 
     def save(self, path: str):
-        """Persist model and guide parameters."""
+        """Save model and guide parameters."""
         torch.save(
             {
                 "module_state": self.module.state_dict(),

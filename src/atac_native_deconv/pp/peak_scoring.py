@@ -1,12 +1,6 @@
-"""Peak scoring for ATAC deconvolution.
+"""Score peaks by cell-type specificity, consistency, and spatial variation.
 
-Computes informativeness scores for each chromatin peak, combining:
-- Cell-type specificity (variance across clusters)
-- Reference reproducibility (signal consistency within clusters)
-- Spatial variability (variation across spatial locations)
-
-Scores are used both for peak pre-filtering and as informative priors
-on learned peak weights in the probabilistic model.
+These scores can filter peaks or set the priors on learned peak weights.
 """
 
 from typing import Optional
@@ -23,7 +17,7 @@ def compute_peak_scores(
     layer: Optional[str] = None,
     n_top_peaks: Optional[int] = None,
 ) -> np.ndarray:
-    r"""Compute composite peak informativeness scores.
+    r"""Score peaks using the reference and, optionally, spatial counts.
 
     .. math::
         \text{score}_p = \text{specificity}_p \times \text{reproducibility}_p
@@ -78,8 +72,7 @@ def compute_peak_scores(
 
 
 def _get_matrix(adata: AnnData, layer: Optional[str] = None):
-    X = adata.layers[layer] if layer else adata.X
-    return X
+    return adata.layers[layer] if layer else adata.X
 
 
 def _cell_type_specificity(
@@ -100,10 +93,7 @@ def _cell_type_specificity(
     for clust in unique_clusters:
         mask = clusters == clust
         X_clust = X[mask]
-        if sp.issparse(X_clust):
-            clust_sum = np.asarray(X_clust.sum(axis=0)).ravel()
-        else:
-            clust_sum = np.asarray(X_clust.sum(axis=0)).ravel()
+        clust_sum = np.asarray(X_clust.sum(axis=0)).ravel()
         total = clust_sum.sum()
         if total > 0:
             group_means.append(clust_sum / total)

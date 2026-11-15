@@ -142,15 +142,12 @@ class ATACDeconvModule(PyroModule):
         self.register_buffer("eps", torch.tensor(1e-8))
         self.register_buffer("ones_11", torch.ones(1, 1))
 
-    # ------------------------------------------------------------------ #
-    #  Pyro model interface                                                #
-    # ------------------------------------------------------------------ #
 
     def create_plates(self, x_data, idx):
         return pyro.plate("obs_plate", size=self.n_obs, dim=-2, subsample=idx)
 
     def list_obs_plate_vars(self):
-        """Observation-plate variable catalogue (for optional amortised guide)."""
+        """Describe the spot-level variables for an optional amortised guide."""
         return {
             "name": "obs_plate",
             "sites": {
@@ -162,7 +159,7 @@ class ATACDeconvModule(PyroModule):
     def forward(self, x_data, idx):
         obs_plate = self.create_plates(x_data, idx)
 
-        # =========== Peak-level (global) latent variables =========== #
+        # Peak-level (global) latent variables
 
         # Peak bias  b_p  ~  Gamma(α, α)   →  E[b_p] = 1
         b_p = pyro.sample(
@@ -178,7 +175,7 @@ class ATACDeconvModule(PyroModule):
             dist.Gamma(self.w_alpha, self.w_beta).to_event(2),
         )  # (1, n_peaks)
 
-        # =========== Spot-level latent variables =========== #
+        # Spot-level latent variables
 
         with obs_plate as ind:
             # Spot detection efficiency  d_s ~ Gamma(α, α/lib)
@@ -197,7 +194,7 @@ class ATACDeconvModule(PyroModule):
                 dist.Gamma(self.a_alpha, self.a_beta).expand([self.n_celltypes]),
             )  # (batch, n_celltypes)
 
-        # =========== Expected counts & observation model =========== #
+        # Expected counts & observation model
 
         # μ_{s,p} = d_s · Σ_c  a_{s,c}·w_p·b_p·θ_{c,p}
         weighted_ref = self.cell_state * w_p * b_p  # (n_celltypes, n_peaks)
